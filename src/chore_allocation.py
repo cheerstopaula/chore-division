@@ -107,7 +107,7 @@ def update_prices_2(X, p, D, m, alpha, alpha_matrix, b, h, l):
     return p, p_x, p_1x, alpha_matrix, alpha, MPBs
 
 
-def pEF1_fPO_three_agent_chore_allocation(m, N, D):
+def pEF1_fPO_three_agent_allocation(m, N, D):
     X, p = initialize_allocation(m, N, D)
     alpha_matrix, alpha = compute_alphas(D, p)
     p_x, p_1x = compute_p_x(X, p)
@@ -124,7 +124,7 @@ def pEF1_fPO_three_agent_chore_allocation(m, N, D):
 
         elif find_transferable_chore(X, MPBs, h, l) is not None:
             chore = find_transferable_chore(X, MPBs, h, l)
-            if p_x[h] - p[chore] > p_x[l]:
+            if p_x[h] - p[chore] - 1e-12 > p_x[l]:
                 X, p_x, p_1x = transfer_chore(X, p, chore, h, l)
                 b, h, l = determine_earners(p_x, p_1x)
 
@@ -146,7 +146,7 @@ def pEF1_fPO_three_agent_chore_allocation(m, N, D):
     return X
 
 
-def pEF1_fPO_ILP_chore_allocation(m, n, D):
+def ILP_pEF1_fPO_allocation(m, n, D):
 
     ##### Define ILP model
     model = Model("ILP")
@@ -201,7 +201,9 @@ def pEF1_fPO_ILP_chore_allocation(m, n, D):
                 # Constraint 3: allocation must be fPO
                 model.addConstr((x[i, j] == 1) >> (w[i] * D[j][i] <= w[k] * D[j][k]))
 
-    # model.setObjective(quicksum(x[i,j] for i in range(n)), GRB.MINIMIZE) #define objective here
+    model.setObjective(
+        quicksum(x[i, j] * D[j, i] for i in range(n) for j in range(m)), GRB.MINIMIZE
+    )
     model.optimize()
 
     X = np.array([[x[i, j].X for i in range(n)] for j in range(m)])
@@ -215,7 +217,9 @@ def EF1(X, D):
     V = X.T @ D
 
     for i in range(n):
-        max_removal = max([D[j, i] for j in range(m) if X[j, i] == 1])
+
+        values = [D[j, i] for j in range(m) if X[j, i] == 1]
+        max_removal = max(values) if values else 0
         for k in range(n):
             if i == k:
                 continue
@@ -226,7 +230,7 @@ def EF1(X, D):
 
 
 def EF_violations(X, D):
-    m, n = X.shape
+    _, n = X.shape
     D = np.array(D)
     V = X.T @ D
 
@@ -239,6 +243,11 @@ def EF_violations(X, D):
                 envy_count += 1
 
     return envy_count
+
+
+def compute_usw(X, D):
+    m, n = X.shape
+    return quicksum(X[j, i] * D[j, i] for j in range(m) for i in range(n))
 
 
 def fPO(X, D):
@@ -280,6 +289,7 @@ def fPO(X, D):
     # Print solution
     if model.status == GRB.OPTIMAL:
         Y_sol = np.array([[Y[i, j].X for j in range(n)] for i in range(m)])
+        print("Y_sol=", Y_sol)
         return False
 
     return True
