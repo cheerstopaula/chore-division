@@ -19,7 +19,7 @@ num_chores_values = np.concatenate(
 print(len(num_chores_values))
 algorithms = ["3ag", "ILP"]
 
-plt.figure(figsize=(14, 8))
+plt.figure(figsize=(12, 2.5))
 for i, alg in enumerate(algorithms):
     runtime_values = []
     averages = []
@@ -134,7 +134,7 @@ arr = np.concatenate([[1], np.arange(50, 1001, 50)])
 
 plt.xticks(arr, [str(x) for x in arr], fontsize=8.2)
 plt.tight_layout()
-plt.subplots_adjust(bottom=0.07)
+plt.subplots_adjust(bottom=0.1)
 plt.subplots_adjust(left=0.05)
 plt.xlabel("Number of Chores")
 plt.ylabel("CPU time (seconds)")
