@@ -8,20 +8,20 @@ from plotly.colors import qualitative
 
 
 palette = qualitative.Plotly
-palette = [palette[i] for i in [1, 0, 2, 4, 3,5]]
+palette = [palette[i] for i in [1, 0, 2, 4, 3, 5]]
 faded_palette = [color + "66" for color in palette]
 
 df = pd.read_csv("experiments_ILP.csv")
 
-M = [50,100,150,250]
-N = [5,10,15,20,30,50]
+M = [50, 100, 150, 250]
+N = [5, 10, 15, 20, 30, 50]
 
 plt.figure(figsize=(6, 3))
 for i, m in enumerate(M):
     runtime_values = []
     averages = []
     for n in N:
-        filtered_df = df[(df["M"] == m) & (df["model"] == "ILP")& (df["N"] == n)]
+        filtered_df = df[(df["M"] == m) & (df["model"] == "ILP") & (df["N"] == n)]
         runtime_values.append(filtered_df["CPU time"].values)
         averages.append(np.mean(filtered_df["CPU time"].values))
         # runtime_values.append(filtered_df["seats"].values)
@@ -63,13 +63,13 @@ for i, m in enumerate(M):
         flier.set_color(palette[i])
 
 M = [400]
-N = [5,10,15,20,30]
+N = [5, 10, 15, 20, 30]
 
 for m in M:
     runtime_values = []
     averages = []
     for n in N:
-        filtered_df = df[(df["M"] == m) & (df["model"] == "ILP")& (df["N"] == n)]
+        filtered_df = df[(df["M"] == m) & (df["model"] == "ILP") & (df["N"] == n)]
         runtime_values.append(filtered_df["CPU time"].values)
         averages.append(np.mean(filtered_df["CPU time"].values))
         # runtime_values.append(filtered_df["seats"].values)
@@ -77,10 +77,10 @@ for m in M:
     print(averages)
     print(len(averages))
 
-    plt.plot(N, averages, color=palette[i+1])
+    plt.plot(N, averages, color=palette[i + 1])
 
     # plt.plot(num_students_values, averages, color=palette[i], marker="o")
-    flierprops = dict(markeredgecolor=palette[i+1])
+    flierprops = dict(markeredgecolor=palette[i + 1])
     box = plt.boxplot(
         runtime_values,
         positions=N,
@@ -92,27 +92,27 @@ for m in M:
         box["whiskers"],
         box["caps"],
     ):
-        whisker.set_color(palette[i+1])  # Set whisker color
+        whisker.set_color(palette[i + 1])  # Set whisker color
         whisker.set_linewidth(1.5)  # Make whiskers thicker
-        cap.set_color(palette[i+1])  # Set cap color
+        cap.set_color(palette[i + 1])  # Set cap color
         cap.set_linewidth(1.5)
     plt.xticks([])
     # Customize the boxes
     for patch in box["boxes"]:
-        patch.set_facecolor(faded_palette[i+1])
-        patch.set_edgecolor(palette[i+1])  # Set vibrant edge color (no alpha)
+        patch.set_facecolor(faded_palette[i + 1])
+        patch.set_edgecolor(palette[i + 1])  # Set vibrant edge color (no alpha)
         patch.set_linewidth(1.5)  # Edge thickness
         # patch.set_alpha(0.4)
         # Customize the median line
     for median in box["medians"]:
-        median.set_color(palette[i+1])  # Set median line color
+        median.set_color(palette[i + 1])  # Set median line color
         median.set_linewidth(1.5)  # Make the line thicker
     for flier in box["fliers"]:
-        flier.set_color(palette[i+1])
+        flier.set_color(palette[i + 1])
 
 
-M = [50,100,150,250, 400]
-N = [5,10,15,20,30, 50]
+M = [50, 100, 150, 250, 400]
+N = [5, 10, 15, 20, 30, 50]
 
 legend_elements = [
     Patch(facecolor=faded_palette[0], edgecolor=palette[0], label=f"{M[0]} chores"),
@@ -137,7 +137,7 @@ plt.subplots_adjust(bottom=0.15)
 plt.subplots_adjust(left=0.12)
 plt.xlabel("Number of Agents")
 plt.ylabel("CPU time (seconds)")
-plt.ylim([-50,2200])
-plt.xlim([3,53])
+plt.ylim([-50, 2200])
+plt.xlim([3, 53])
 
 plt.savefig(f"N_agents_runtime.jpg", dpi=300)

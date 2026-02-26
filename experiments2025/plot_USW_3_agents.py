@@ -68,9 +68,6 @@ for i, alg in enumerate(algorithms):
         flier.set_color(palette[i])
 
 
-
-
-
 legend_elements = [
     Patch(facecolor=faded_palette[0], edgecolor=palette[0], label="3-Agent Algorithm"),
     Patch(facecolor=faded_palette[1], edgecolor=palette[1], label="ILP"),

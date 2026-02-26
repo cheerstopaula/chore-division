@@ -47,18 +47,16 @@ def save_experiment_result(X, D, seed, model, time_CPU, time_elapsed, filename):
         )
 
 
-agent_range = [50,100]
+agent_range = [50, 100]
 filename = "experiments_ILP.csv"
 
 
 # chore_range = np.concatenate(
 #     [np.arange(1, 11), np.arange(20, 101, 10), np.arange(150, 401, 50)]
 # )
-chore_range = np.concatenate(
-    [np.arange(80, 101, 10), np.arange(150, 401, 50)]
-)
+chore_range = np.concatenate([np.arange(80, 101, 10), np.arange(150, 401, 50)])
 
-for n in agent_range: 
+for n in agent_range:
     for m in chore_range:
         for seed in range(10):
             np.random.seed(seed)
@@ -72,5 +70,5 @@ for n in agent_range:
 
             save_experiment_result(X, D, seed, "ILP", time_CPU, time_elapsed, filename)
     chore_range = np.concatenate(
-    [np.arange(1, 11), np.arange(20, 101, 10), np.arange(150, 401, 50)]
-)
+        [np.arange(1, 11), np.arange(20, 101, 10), np.arange(150, 401, 50)]
+    )

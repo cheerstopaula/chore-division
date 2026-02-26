@@ -13,7 +13,7 @@ faded_palette = [color + "66" for color in palette]
 
 df = pd.read_csv("experiments.csv")
 
-num_chores_values = [1,2,3,4,5,6,7,8,9,10,20]
+num_chores_values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20]
 print(len(num_chores_values))
 algorithms = ["3ag", "ILP"]
 
@@ -66,9 +66,6 @@ for i, alg in enumerate(algorithms):
         flier.set_color(palette[i])
 
 
-
-
-
 legend_elements = [
     Patch(facecolor=faded_palette[0], edgecolor=palette[0], label="3-Agent Algorithm"),
     Patch(facecolor=faded_palette[1], edgecolor=palette[1], label="ILP"),
@@ -80,7 +77,6 @@ plt.legend(
     loc="upper left",
     fontsize=12,
 )
-
 
 
 plt.xticks(num_chores_values, fontsize=8.2)

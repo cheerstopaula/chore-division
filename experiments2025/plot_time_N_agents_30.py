@@ -8,22 +8,22 @@ from plotly.colors import qualitative
 
 
 palette = qualitative.Plotly
-palette = [palette[i] for i in [1, 0, 2, 4, 3,5]]
+palette = [palette[i] for i in [1, 0, 2, 4, 3, 5]]
 faded_palette = [color + "66" for color in palette]
 
 df = pd.read_csv("experiments_ILP.csv")
 
-num_chores_values = np.concatenate(
-    [np.arange(80, 101, 10), np.arange(150, 401, 50)]
-)
-agent_range = [5,10,15,20]
+num_chores_values = np.concatenate([np.arange(80, 101, 10), np.arange(150, 401, 50)])
+agent_range = [5, 10, 15, 20]
 
 plt.figure(figsize=(12, 3))
 for i, n in enumerate(agent_range):
     runtime_values = []
     averages = []
     for num_chore_value in num_chores_values:
-        filtered_df = df[(df["M"] == num_chore_value) & (df["model"] == "ILP")& (df["N"] == n)]
+        filtered_df = df[
+            (df["M"] == num_chore_value) & (df["model"] == "ILP") & (df["N"] == n)
+        ]
 
         # filtered_df["seats"]=filtered_df["seats"].astype('float')
         runtime_values.append(filtered_df["CPU time"].values)
@@ -67,13 +67,27 @@ for i, n in enumerate(agent_range):
         flier.set_color(palette[i])
 
 
-
-
 legend_elements = [
-    Patch(facecolor=faded_palette[0], edgecolor=palette[0], label=f"{agent_range[0]} agents"),
-    Patch(facecolor=faded_palette[1], edgecolor=palette[1], label=f"{agent_range[1]} agents"),
-    Patch(facecolor=faded_palette[2], edgecolor=palette[2], label=f"{agent_range[2]} agents"),
-    Patch(facecolor=faded_palette[3], edgecolor=palette[3], label=f"{agent_range[3]} agents"),
+    Patch(
+        facecolor=faded_palette[0],
+        edgecolor=palette[0],
+        label=f"{agent_range[0]} agents",
+    ),
+    Patch(
+        facecolor=faded_palette[1],
+        edgecolor=palette[1],
+        label=f"{agent_range[1]} agents",
+    ),
+    Patch(
+        facecolor=faded_palette[2],
+        edgecolor=palette[2],
+        label=f"{agent_range[2]} agents",
+    ),
+    Patch(
+        facecolor=faded_palette[3],
+        edgecolor=palette[3],
+        label=f"{agent_range[3]} agents",
+    ),
     # Patch(facecolor=faded_palette[4], edgecolor=palette[4], label=f"{agent_range[4]} agents"),
 ]
 plt.legend(
