@@ -1,48 +1,41 @@
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
+import matplotlib.pyplot as plt
+import time
+
+
+# ----------------------------
+# Demand computation
+# ----------------------------
 
 
 def demand_bundles(utilities, budgets, prices):
-    """
-    Solve one >= knapsack per agent:
-        min   sum_j d[i,j] x_j
-        s.t.  sum_j p[j] x_j >= min_payment[i]
-              x_j in {0,1}
-    """
-
     N, M = utilities.shape
     X = np.zeros((N, M), dtype=int)
 
-    # Build model ONCE
     model = gp.Model()
     model.setParam("OutputFlag", 0)
 
-    # Variables
     x = model.addVars(M, vtype=GRB.BINARY, name="x")
 
-    # Add payment constraint (RHS will change per agent)
-    payment_constr = model.addConstr(
-        gp.quicksum(prices[j] * x[j] for j in range(M)) <= 0, name="payment"
+    budget_constr = model.addConstr(
+        gp.quicksum(prices[j] * x[j] for j in range(M)) <= 0, name="budget"
     )
 
-    # Solve per agent
     for i in range(N):
 
-        # Update objective coefficients
         model.setObjective(
             gp.quicksum(utilities[i, j] * x[j] for j in range(M)), GRB.MAXIMIZE
         )
 
-        # Update RHS
-        payment_constr.RHS = float(budgets[i])
+        budget_constr.RHS = float(budgets[i])
 
         model.optimize()
 
         if model.status != GRB.OPTIMAL:
             raise RuntimeError(f"No feasible solution for agent {i}")
 
-        # Store solution
         for j in range(M):
             X[i, j] = int(x[j].X)
 
@@ -50,75 +43,100 @@ def demand_bundles(utilities, budgets, prices):
 
 
 def clearing_error(X, quantities):
-    """
-    Parameters
-    ----------
-    X : (N, M) numpy array (0/1)
-        Allocation / demand matrix
-    quantities : (M,) numpy array
-        Available supply of each item
-
-    Returns
-    -------
-    z : (M,) numpy array
-        Clearing error vector:
-        z[j] = total_demand[j] - quantities[j]
-    """
     total_demand = X.sum(axis=0)
-    z = total_demand - quantities
-    return z
+    return total_demand - quantities
 
 
-import numpy as np
+# ----------------------------
+# Tatonnement loop
+# ----------------------------
+
+
+def tatonnement_loop(
+    utilities, budgets, quantities, price_stepsize, max_iter=200, tol=1e-9
+):
+    N, M = utilities.shape
+    prices = np.zeros(M)
+
+    history = []
+
+    start_time = time.time()
+
+    for it in range(max_iter):
+
+        X = demand_bundles(utilities, budgets, prices)
+        z = clearing_error(X, quantities)
+
+        error_value = np.sum(np.abs(z))
+        history.append(error_value)
+
+        print(f"Tatonnement iter {it}: {error_value}")
+
+        if np.max(np.abs(z)) <= tol:
+            break
+
+        prices = prices + price_stepsize * z
+        prices = np.maximum(prices, 0.0)
+
+    elapsed = time.time() - start_time
+
+    return prices, z, history, elapsed
+
+
+# ----------------------------
+# Candidate bundle generation
+# ----------------------------
 
 
 def generate_candidate_bundles(utilities, budgets, prices, epsilon, stepsize):
     N, _ = utilities.shape
 
-    candidates = []  # list per agent
-    payment_grid = []  # store corresponding perturbed payments
+    candidates = []
+    budget_grid = []
 
     for i in range(N):
-        base = budgets[i]
 
+        base = budgets[i]
         grid = np.arange(base - epsilon, base + epsilon + 1e-9, stepsize)
+
         bundles_i = []
-        payments_i = []
+        budget_i = []
 
         for b in grid:
             X_i = demand_bundles(utilities[i : i + 1], np.array([b]), prices)[0]
 
             bundles_i.append(X_i)
-            payments_i.append(b)
+            budget_i.append(b)
 
-        candidates.append(np.array(bundles_i))  # shape (K_i, M)
-        payment_grid.append(np.array(payments_i))
+        candidates.append(np.array(bundles_i))
+        budget_grid.append(np.array(budget_i))
 
-    return candidates, payment_grid
+    return candidates, budget_grid
 
 
-def minimize_clearing_error(
-    candidates, payment_grid, original_min_payments, quantities
-):
+# ----------------------------
+# Global ILP
+# ----------------------------
+
+
+def minimize_clearing_error(candidates, budget_grid, original_budgets, quantities):
     N = len(candidates)
     M = len(quantities)
 
     model = gp.Model()
     model.setParam("OutputFlag", 0)
 
-    # Decision variables y_{i,k}
     y = {}
+
     for i in range(N):
-        K_i = candidates[i].shape[0]
-        for k in range(K_i):
+        for k in range(candidates[i].shape[0]):
             y[i, k] = model.addVar(vtype=GRB.BINARY, name=f"y_{i}_{k}")
 
-    # One bundle per agent
     for i in range(N):
-        K_i = candidates[i].shape[0]
-        model.addConstr(gp.quicksum(y[i, k] for k in range(K_i)) == 1)
+        model.addConstr(
+            gp.quicksum(y[i, k] for k in range(candidates[i].shape[0])) == 1
+        )
 
-    # Demand per item
     D = {}
     for j in range(M):
         D[j] = gp.quicksum(
@@ -127,7 +145,6 @@ def minimize_clearing_error(
             for k in range(candidates[i].shape[0])
         )
 
-    # L1 clearing error
     z_plus = model.addVars(M, lb=0)
     z_minus = model.addVars(M, lb=0)
 
@@ -136,185 +153,148 @@ def minimize_clearing_error(
 
     clearing_obj = gp.quicksum(z_plus[j] + z_minus[j] for j in range(M))
 
-    # ---- Tie-breaking deviation term ----
     deviation_obj = gp.quicksum(
-        abs(payment_grid[i][k] - original_min_payments[i]) * y[i, k]
+        abs(budget_grid[i][k] - original_budgets[i]) * y[i, k]
         for i in range(N)
         for k in range(candidates[i].shape[0])
     )
 
-    # Multi-objective: priority 1 = clearing error
     model.setObjectiveN(clearing_obj, index=0, priority=2)
-
-    # priority 2 = smallest deviation
     model.setObjectiveN(deviation_obj, index=1, priority=1)
 
     model.optimize()
 
-    # Extract solution
     chosen_bundles = []
-    chosen_payments = []
+    chosen_budgets = []
 
     for i in range(N):
-        K_i = candidates[i].shape[0]
-        for k in range(K_i):
+        for k in range(candidates[i].shape[0]):
             if y[i, k].X > 0.5:
                 chosen_bundles.append(candidates[i][k])
-                chosen_payments.append(payment_grid[i][k])
+                chosen_budgets.append(budget_grid[i][k])
                 break
 
-    return np.array(chosen_bundles), np.array(chosen_payments)
+    return np.array(chosen_bundles), np.array(chosen_budgets)
 
 
-def tatonnement_loop(
-    utilities, original_budgets, quantities, price_stepsize, max_iter=500, tol=1e-9
-):
-    """
-    Iterative price adjustment with endogenous budget perturbation.
-
-    Returns
-    -------
-    prices
-    chosen_payments
-    chosen_bundles
-    clearing_error_vector
-    """
-
-    N, M = utilities.shape
-
-    # 1. Initialize prices
-    prices = np.full(M, 0)
-
-    for it in range(max_iter):
-
-        X = demand_bundles(utilities, original_budgets, prices)
-        z = clearing_error(X, quantities)
-
-        # print(f"Iteration {it}")
-        # print("Prices:", prices)
-        print(f"Clearing error iteration {it}:", np.sum(np.abs(z)))
-        # print(f"Clearing error iteration {it}:", z)
-
-        # 5. Check convergence
-        if np.max(np.abs(z)) <= tol:
-            print("Exact clearing achieved.")
-            return prices, z
-
-        # 6. Update prices
-        prices = prices + price_stepsize * z
-
-        # Project to nonnegative prices
-        prices = np.maximum(prices, 0.0)
-
-    print("Max iterations reached.")
-    return prices, X, z
+# ----------------------------
+# Price adjustment loop
+# ----------------------------
 
 
 def price_adjustment_loop(
     utilities,
-    original_min_payments,
+    original_budgets,
     prices,
     quantities,
     epsilon,
     grid_stepsize,
     price_stepsize,
-    max_iter=100,
+    max_iter=200,
     tol=1e-9,
 ):
-    """
-    Iterative price adjustment with endogenous budget perturbation.
 
-    Returns
-    -------
-    prices
-    chosen_payments
-    chosen_bundles
-    clearing_error_vector
-    """
+    history = []
 
-    N, M = utilities.shape
+    start_time = time.time()
 
     for it in range(max_iter):
 
-        # 2. Generate candidate bundles for current prices
-        candidates, payment_grid = generate_candidate_bundles(
-            utilities, original_min_payments, prices, epsilon, grid_stepsize
+        candidates, budget_grid = generate_candidate_bundles(
+            utilities, original_budgets, prices, epsilon, grid_stepsize
         )
 
-        # 3. Solve global ILP with lexicographic tie-breaking
-        chosen_bundles, chosen_payments = minimize_clearing_error(
-            candidates, payment_grid, original_min_payments, quantities
+        chosen_bundles, chosen_budgets = minimize_clearing_error(
+            candidates, budget_grid, original_budgets, quantities
         )
 
-        # 4. Compute clearing error
         z = clearing_error(chosen_bundles, quantities)
 
-        # print(f"Iteration {it}")
-        # print("Prices:", prices)
-        print(f"Clearing error iteration {it}:", np.sum(np.abs(z)))
+        error_value = np.sum(np.abs(z))
+        history.append(error_value)
 
-        # 5. Check convergence
+        print(f"Adjustment iter {it}: {error_value}")
+
         if np.max(np.abs(z)) <= tol:
-            print("Exact clearing achieved.")
-            return prices, chosen_payments, chosen_bundles, z
+            break
 
-        # 6. Update prices
         prices = prices + price_stepsize * z
-
-        # Project to nonnegative prices
         prices = np.maximum(prices, 0.0)
 
-    print("Max iterations reached.")
-    return prices, chosen_payments, chosen_bundles, z
+    elapsed = time.time() - start_time
+
+    return prices, chosen_budgets, chosen_bundles, z, history, elapsed
 
 
-# Reproducibility
+# ----------------------------
+# MAIN SCRIPT
+# ----------------------------
+
 np.random.seed(0)
 
-# Problem size
-N = 10  # number of agents
-M = 50  # number of items
+N = 20
+M = 80
 
-# Problem instance
-disutilities = np.random.randint(1, 7, size=(N, M))
+utilities = np.random.randint(1, 7, size=(N, M))
 quantities = np.random.randint(1, 3, size=M)
 
-# Model parameters
-beta = 0.04
+beta = 0.08
 price_stepsize = 0.002
 grid_stepsize = price_stepsize
 epsilon = beta / 4
 
-# Initial minimum payments
 initial_payments = np.random.uniform(1.0 + beta / 4, 1.0 + 3 * beta / 4, size=N)
 
-# # Prices between 0.2 and 0.6 (so bundles can exceed 1)
-# prices = np.array([0.25,0.5,0.6,0.7,0.8,1,0.9,1])
 
-# X = demand_bundles(disutilities, initial_payments, prices)
-# print(clearing_error(X, quantities))
+# --- Tatonnement warm-up ---
 
-prices, X, z = tatonnement_loop(
-    disutilities, initial_payments, quantities, price_stepsize
+prices, z, tat_history, tat_time = tatonnement_loop(
+    utilities, initial_payments, quantities, price_stepsize, max_iter=100
 )
-print(prices, np.sum(np.abs(z)))
 
-prices, chosen_payments, chosen_bundles, z = price_adjustment_loop(
-    disutilities,
-    initial_payments,
-    prices,
-    quantities,
-    epsilon,
-    grid_stepsize=grid_stepsize,
-    price_stepsize=price_stepsize / 10,
-)
-print(chosen_payments, np.sum(np.abs(z)))
-print(prices)
+print("\nTatonnement time:", tat_time)
 
-X = demand_bundles(
-    prices=prices, min_payments=chosen_payments, disutilities=disutilities
+
+# --- Price adjustment phase ---
+
+prices, chosen_payments, chosen_bundles, z, adj_history, adj_time = (
+    price_adjustment_loop(
+        utilities,
+        initial_payments,
+        prices,
+        quantities,
+        epsilon,
+        grid_stepsize,
+        price_stepsize / 10,
+    )
 )
-print(np.sum(np.abs(clearing_error(X, quantities))))
-print(quantities)
-print(clearing_error(X, quantities))
-print(X)
+
+print("Adjustment time:", adj_time)
+
+
+# ----------------------------
+# Plot combined history
+# ----------------------------
+
+plt.figure()
+
+# Tatonnement (dotted)
+plt.plot(
+    range(len(tat_history)),
+    tat_history,
+    linestyle="dotted",
+    label="Tatonnement (warm-up)",
+)
+
+# Adjustment (solid, continues index)
+offset = len(tat_history)
+plt.plot(
+    range(offset, offset + len(adj_history)), adj_history, label="Price adjustment"
+)
+
+plt.xlabel("Iteration")
+plt.ylabel("Sum of absolute clearing error")
+plt.title("Clearing error over iterations")
+plt.legend()
+
+plt.show()
